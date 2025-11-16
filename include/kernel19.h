@@ -1,5 +1,9 @@
+// there is a bug, segmentation fault
+
 #include "immintrin.h"
 #include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "../utils.h"
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
@@ -706,7 +710,14 @@ void mydgemm_cpu_v19(\
         double *a_buffer_local = NULL;
         double *b_buffer_local = NULL;
         if (ithr == 0) {
-            b_buffer_global = (double *)aligned_alloc(4096, sizeof(double) * (N_BLOCKING * K_BLOCKING));
+            size_t b_size = sizeof(double) * (N_BLOCKING * K_BLOCKING);
+            // aligned_alloc requires size to be a multiple of alignment
+            size_t aligned_size = (b_size + 4095) & ~(size_t)4095;
+            b_buffer_global = (double *)aligned_alloc(4096, aligned_size);
+            if (!b_buffer_global) {
+                fprintf(stderr, "Error: aligned_alloc failed for b_buffer_global\n");
+                exit(1);
+            }
         }
         #pragma omp barrier
         b_buffer_local = b_buffer_global;
@@ -730,13 +741,21 @@ void mydgemm_cpu_v19(\
                 }
                 #pragma omp barrier
                 if (!a_buffer_local) {
-                    a_buffer_local = (double *)aligned_alloc(4096, sizeof(double) * (M_BLOCKING * k_inc));
+                    size_t a_size = sizeof(double) * (M_BLOCKING * k_inc);
+                    // aligned_alloc requires size to be a multiple of alignment
+                    size_t aligned_size = (a_size + 4095) & ~(size_t)4095;
+                    a_buffer_local = (double *)aligned_alloc(4096, aligned_size);
+                    if (!a_buffer_local) {
+                        fprintf(stderr, "Error: aligned_alloc failed for a_buffer_local\n");
+                        exit(1);
+                    }
                 }
 
                 for (m_count = 0; m_count < m_block; m_count += m_inc) {
                     m_inc = (m_block - m_count > M_BLOCKING) ? M_BLOCKING : m_block - m_count;
                     packing_a_k19(alpha, &A(m_offset + m_count, k_count), a_buffer_local, LDA, m_inc, k_inc);
-                    double *b_buff_ptr = b_buffer_local + k_inc * n_count;
+                    // b_buffer_local already contains the packed data for current n_count block starting from offset 0
+                    double *b_buff_ptr = b_buffer_local;
                     macro_kernel_k19(a_buffer_local, b_buff_ptr, m_inc, n_inc, k_inc, &C(m_count + m_offset, n_count), LDC);
                 }
 
