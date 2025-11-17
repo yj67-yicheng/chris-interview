@@ -52,6 +52,8 @@ comments: Obviously, it should be improved, because there are more register bloc
 
 ### 5. SIMD
 
-process data using Single Instruction Multiple Data (SIMD) instructions. SIMD process 4 floats simultaneously, and improve cache utilization.
+process data using Single Instruction Multiple Data (SIMD) instructions. SIMD can process 4 float elements at a lane, and improve cache utilization.
 
 ![5.1](./self-solution/static/5.1.png)
+
+comments: because we use the SIMD instructions instead of scalar instructions, we get great great improvement.
