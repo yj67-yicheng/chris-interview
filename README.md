@@ -52,8 +52,76 @@ comments: Obviously, it should be improved, because there are more register bloc
 
 ### 5. SIMD
 
-process data using Single Instruction Multiple Data (SIMD) instructions. SIMD can process 4 float elements at a lane, and improve cache utilization.
+process data using Single Instruction Multiple Data (SIMD) instructions. SIMD can process 4 float elements at a lane, and improve cache utilization. (\_\_m128)
 
 ![5.1](./self-solution/static/5.1.png)
 
 comments: because we use the SIMD instructions instead of scalar instructions, we get great great improvement.
+
+### 6. Kernel 5 plus
+
+update \_\_m128 to \_\_m256, which can process 8 floats in a lane. \
+Register blocking 4 \* 8 \
+Unroll the loop by 4 folds. \
+Using \_\_mm256_fmadd_ps, instead of mul + add
+
+![6.1](./self-solution/static/6.1.png)
+
+comments: slightly improves the performance. \
+ps: should modify 'Code Runner' or use 'bash'
+
+### 7. Kernel 6 + 8 \* 4 blocking
+
+We changed the previous kernel from 4x4 to the current 8x4 so that we obtain a better utilization on all 256-bit YMM registers
+
+![7.1](./self-solution/static/7.1.png)
+
+comments: we have more blocking, so it should be improved
+
+### 8. Kernel 7 + cache blocking
+
+At this point, we have `matmul_v8 (cache blocking) + macro_kernel (same as kernel 7 implementation) + scalar_kernel (edges within block)` to deal with the tasks
+
+```
+m_blocking: 192
+n_blocking: 2048
+k_blocking: 384
+```
+
+![8.1](./self-solution/static/8.1.png)
+
+### 9. Kernel 8 + Packing
+
+Packing the data into continous buffers, eliminating the performance penalty of irregular memory access patterns found in vectors
+
+![9.1](./self-solution/static/9.1.png)
+
+comments: fast! But code becomes complicated coz it's greatly related to the hardware layer (cache, TBL, memory, pointers stuff)
+
+## Some other resources
+
+![o1](./self-solution/static/o1.png)
+
+```General Matrix Multiplication
+#include <cuda_runtime.h>
+#include <cuda_fp16.h>
+
+__global__ void matmul(const half* A, const half* B, half* C, int M, int N, int K, float alpha, float beta) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
+    int col = blockIdx.y * blockDim.y + threadIdx.y;
+    if (row >= M || col >= N) return;
+    float sum = beta * (float)C[row * N + col];
+    for (int i = 0; i < K; i++) {
+        sum += alpha * (float)A[row * K + i] * (float)B[i * N + col];
+    }
+    C[row * N + col] = (half)sum;
+}
+
+// A, B, and C are device pointers
+extern "C" void solve(const half* A, const half* B, half* C, int M, int N, int K, float alpha, float beta) {
+    dim3 threadsPerBlock(16, 16);
+    dim3 blockPerGrid((M + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                      (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+    matmul<<<blockPerGrid, threadsPerBlock>>>(A, B, C, M, N, K, alpha, beta);
+}
+```
