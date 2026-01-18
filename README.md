@@ -1,18 +1,14 @@
 ## Task:
 
-(said by Chris)
-
 What we want to do is to implement “matrix multiply followed by subtract max” over two square matrices. You know matrix multiply; what we want is a code that also finds the max value in each row, and subtracts it from each entry in that row.
 
 Here's exactly what I'd like you to do. Start with the "stupid" implementation, where you just do a nested loops matrix multiply, you write out the result, and then you do a row-by-row subtract-max. See how fast it is on a matrix multiply of two matrices both of size M by M, for M in {256 \* x for x in 1, 2, 3, ..., 10}. Then try to make it faster. Write a little report. Each time you try something, describe what you did, and if it helped!
 
-## Env setup
-
-WSL, Git, CPU flag ensure, Makefile, try to run dgemm_x86[0 - 19]
-
-## Review
+## Resources
 
 [Github repo reference](https://github.com/yzhaiustc/Optimizing-DGEMM-on-Intel-CPUs-with-AVX512F#how-to-optimize-dgemm-on-x86-cpu-platforms)
+
+![o1](./self-solution/static/o1.png)
 
 ## Play around for opt (C++)
 
@@ -97,31 +93,3 @@ Packing the data into continous buffers, eliminating the performance penalty of 
 ![9.1](./self-solution/static/9.1.png)
 
 comments: fast! But code becomes complicated coz it's greatly related to the hardware layer (cache, TBL, memory, pointers stuff)
-
-## Some other resources
-
-![o1](./self-solution/static/o1.png)
-
-```General Matrix Multiplication
-#include <cuda_runtime.h>
-#include <cuda_fp16.h>
-
-__global__ void matmul(const half* A, const half* B, half* C, int M, int N, int K, float alpha, float beta) {
-    int row = blockIdx.x * blockDim.x + threadIdx.x;
-    int col = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row >= M || col >= N) return;
-    float sum = beta * (float)C[row * N + col];
-    for (int i = 0; i < K; i++) {
-        sum += alpha * (float)A[row * K + i] * (float)B[i * N + col];
-    }
-    C[row * N + col] = (half)sum;
-}
-
-// A, B, and C are device pointers
-extern "C" void solve(const half* A, const half* B, half* C, int M, int N, int K, float alpha, float beta) {
-    dim3 threadsPerBlock(16, 16);
-    dim3 blockPerGrid((M + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                      (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
-    matmul<<<blockPerGrid, threadsPerBlock>>>(A, B, C, M, N, K, alpha, beta);
-}
-```
